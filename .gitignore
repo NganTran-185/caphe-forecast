@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtualenv / uv
+.venv/
+venv/
+.uv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Env / secrets
+.env
+.env.local
+
+# Data (raw and intermediate stay local; only .gitkeep is tracked)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# Logs / outputs
+logs/
+*.log
+mlruns/
+wandb/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/

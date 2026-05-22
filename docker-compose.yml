@@ -1,0 +1,16 @@
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16
+    container_name: caphe_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-caphe}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-caphe_forecast}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - caphe_pgdata:/home/postgres/pgdata/data
+
+volumes:
+  caphe_pgdata:
