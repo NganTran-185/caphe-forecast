@@ -30,8 +30,8 @@ walk-forward backtesting and compared against this baseline using honest
 error metrics (MAE/RMSE) (expected) 
 
 ## Roadmap
-Improved forecast — model with walk-forward backtesting, benchmarked
+- Improved forecast — model with walk-forward backtesting, benchmarked
 against the baseline with honest error metrics (in progress)
-Add robusta as a second instrument
-Date-range controls and richer chart interactions
+- Add robusta as a second instrument
+- Date-range controls and richer chart interactions
 

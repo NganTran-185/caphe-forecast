@@ -5,7 +5,7 @@ import os
 import psycopg
 from dotenv import load_dotenv
  
-load_dotenv()  # reads .env
+load_dotenv()  
  
  
 def _connection_string() -> str:
@@ -33,10 +33,7 @@ UPSERT_SQL = """
 """
  
 def upsert_prices(rows: list[dict]) -> int:
-    """
-    Upsert a list of row-dicts into market_data.prices.
-    Returns the number of rows sent. Safe to run repeatedly.
-    """
+    
     if not rows:
         print("No rows to upsert.")
         return 0
@@ -51,7 +48,7 @@ def upsert_prices(rows: list[dict]) -> int:
  
  
 def count_rows() -> int:
-    """Quick check: how many rows are currently in the table?"""
+   
     with psycopg.connect(_connection_string()) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM market_data.prices;")
