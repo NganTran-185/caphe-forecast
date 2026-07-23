@@ -1,110 +1,134 @@
-# ☕ Coffee Price Tracker & Forecast
-A deployed web dashboard tracking global arabica coffee futures (ICE Coffee C),
-with price history, a simple forecast, and a plain-language market signal. 
- 🔗 Live demo: https://caphe-forecast.streamlit.app/
- 
+# Coffee Price Tracker & Forecast
+
+A production-style forecasting pipeline for coffee futures, paired with an MRM-inspired model validation layer: assumption testing, multi-baseline benchmarking, and structural-break analysis. 
+
+> This project applies model-risk-management *practices* (assumption testing,
+> benchmarking, limitations documentation) to a self-built forecasting model. It
+> demonstrates validation discipline; it is not a regulated validation exercise.
+
+---
+> Applies model-risk-management *practices* to a self-built forecasting model.
+> It demonstrates validation discipline; it is not a regulated validation exercise.
+---
+
+## Why this project
+
+This one asks the question a model validator asks: **should this model be trusted, and where does
+it break?**
+
+Pipeline: it ingests data daily, stores it in a hosted database,
+and serves a public dashboard. The validation layer sits on top: testing whether
+the model's assumptions hold, benchmarking it against alternatives, and
+documenting where it's fragile.
+
+## Headline findings
+
+_Data through 2026-07-21 · run 2026-07-22 · all figures from walk-forward
+backtesting (no look-ahead bias)_
+
+- **Price levels are not forecastable.** Trend and drift models both lose to a
+  naive baseline (+43.4% and +12.5% RMSE). Consistent with weak-form efficiency —
+  this is what motivated re-targeting the model at volatility.
+- **Volatility is forecastable**, because it clusters. GARCH(1,1) beats a
+  persistence baseline by **−28.8% RMSE**, ahead of EWMA (−12.3%) and a 30-day
+  historical estimate (−4.3%).
+- **The model's edge widens under stress**, contrary to the initial concern:
+  −21.5% in calm regimes → −31.8% normal → **−39.1% turbulent**.
+- **Assumptions verified, not assumed.** Returns are stationary (ADF p ≈ 0) and
+  ARCH effects are overwhelming (Engle LM p ≈ 7 × 10⁻¹⁸), so a GARCH-class model
+  is an evidenced choice.
+- **Principal open risk:** out-of-distribution regimes. Volatility currently sits
+  at the **99.9th percentile** of the sample — above anything in the fitted
+  history — where GARCH's mean-reversion anchor may cause under-forecasting. The
+  backtest cannot measure this; live monitoring is the recommended next control.
+
+→ Methodology, full tables, and caveats in
+[`notebooks/validation_findings.md`](notebooks/validation_findings.md).
+
 ## Status
-Live and self-maintaining. The full data pipeline, hosted database, deployed
-dashboard, and daily automated refresh are all built and running. The forecasting
-analysis is complete.
 
-## The Project
-An end-to-end data pipeline and dashboard for coffee futures prices. It ingests
-daily market data, stores a multi-year history in a hosted PostgreSQL database,
-refreshes itself daily, and serves everything through a public Streamlit app.
+| Component | Status |
+|---|---|
+| Data pipeline (ingest → Postgres → dashboard) | Live |
+| Daily automated refresh (GitHub Actions) | Live |
+| Volatility model (GARCH / EWMA) | Complete |
+| Assumption testing (ADF, ARCH effects) | Complete |
+| Regime-segmented benchmarking |  Complete |
+| Structural-break analysis | Complete |
+| Ongoing monitoring (drift tracking) | In progress |
+| Validation memo | Planned |
 
-It tracks the global benchmark (arabica futures), useful as a market
-indicator — not personalized trading advice.
+## Architecture
 
-## Features:
-- Latest price with day-over-day change
-- Interactive price-history chart (Plotly)
-- Plain-language signal summarizing the recent trend
-- Volatility analysis — rolling volatility, current regime, and model results
-- Automatic daily data refresh — no manual intervention
+```
+yfinance (KC=F)
+      │
+      ▼
+Python fetcher ──upsert──▶ Neon (hosted PostgreSQL)
+      ▲                          │
+      │                          ▼
+GitHub Actions (daily cron)   Streamlit dashboard ──▶ public URL
+                                   │
+                                   ▼
+                        Validation layer (offline):
+                        assumptions · benchmarking · breaks
+```
 
-## Forecasting
-
-The forecasting work produced two findings, both validated with **walk-forward
-backtesting** (train on the past, predict the future, roll forward — never
-letting future data leak into a prediction):
-
-**1. Price level is close to a random walk.** Trend extrapolation and drift
-models both *lost* to a naive "tomorrow = today" baseline:
-
-| Model            | RMSE  | vs. baseline   |
-|------------------|-------|----------------|
-| naive (baseline) | 17.66 | —              |
-| drift            | 19.86 | +12.5% worse   |
-| trend            | 25.33 | +43.4% worse   |
-
-This is consistent with weak-form market efficiency — short-term price direction
-carries little memory.
-
-**2. Volatility *is* forecastable**, because it clusters (calm follows calm,
-turbulent follows turbulent). Predicting realized volatility, both models beat
-the persistence baseline:
-
-| Model                  | RMSE     | vs. baseline   |
-|------------------------|----------|----------------|
-| persistence (baseline) | 0.00559  | —              |
-| EWMA                   | 0.00486  | −13.1% better  |
-| GARCH(1,1)             | 0.00379  | −32.1% better  |
-
-**Takeaway:** direction has no memory, but magnitude does. The dashboard shows
-the price forecast as an honest baseline (flagged as indicative), and surfaces
-the volatility analysis — the genuinely predictable signal — in its own tab.
+Loads are **idempotent** (`INSERT ... ON CONFLICT`), so re-runs never duplicate
+data. Backtests and validation tests run offline; the dashboard displays
+evaluated results rather than recomputing them per page load.
 
 ## Tech stack
 
-| Layer        | Tool                                  |
-|--------------|---------------------------------------|
-| Data source  | yfinance (`KC=F`, ICE Coffee C)       |
-| Database     | Neon (serverless PostgreSQL)          |
-| Modelling    | numpy, EWMA, GARCH (`arch`)           |
-| App / UI     | Streamlit + Plotly                    |
-| DB driver    | psycopg                               |
-| Automation   | GitHub Actions (daily cron)           |
-| Hosting      | Streamlit Community Cloud             |
+| Layer | Tool |
+|---|---|
+| Data source | yfinance (`KC=F`, ICE Coffee C) |
+| Database | Neon (serverless PostgreSQL) |
+| Modelling | `arch` (GARCH), numpy (EWMA) |
+| Validation | statsmodels (ADF, Engle LM, Ljung–Box) |
+| App / UI | Streamlit + Plotly |
+| Automation | GitHub Actions (daily cron) |
+| Hosting | Streamlit Community Cloud |
 
-## Project notes
+## Repository guide
 
-- **Data-source pivot.** The original plan scraped Vietnamese farmgate price
-  aggregators. Source reconnaissance found the candidates were duplicates,
-  stale, or actively defended with CSS obfuscation — so the project pivoted to a
-  clean, reliable futures API rather than maintain a brittle scraper.
-- **Schema design.** A natural composite key (`obs_date`, `symbol`, `source`)
-  serves as the primary key, making the daily upsert idempotent.
-- **One config, three environments.** Database credentials are read from a local
-  `.env` (dev), Streamlit secrets (app), and a GitHub Actions secret (cron) — the
-  same code runs in all three.
-- **Precomputed evaluation.** Backtests (including refit-per-window GARCH) run
-  offline; the app displays the evaluated results, so page loads stay fast and
-  the heavy modelling dependency stays out of the deployment.
+| Path | Purpose |
+|---|---|
+| `scripts/fetch_futures.py` | Extract daily OHLCV from the API |
+| `scripts/db.py` | Idempotent upsert layer |
+| `scripts/backfill.py` | Full historical load / daily refresh |
+| `scripts/backtest.py` | Walk-forward backtest — price models |
+| `scripts/vol_backtest.py` | Walk-forward backtest — volatility models |
+| `scripts/regime_backtest.py` | Regime-segmented scorecard |
+| `scripts/validate_assumptions.py` | ADF, ARCH-effect tests, break plot |
+| `scripts/check_vol_dates.py` | Maps volatility regimes to calendar dates |
+| `streamlit_app.py` | Dashboard (price + volatility analysis) |
+| `docs/validation_findings.md` | Full validation write-up |
 
 ## Running locally
 
 ```bash
 git clone https://github.com/YOUR-USERNAME/caphe-forecast.git
 cd caphe-forecast
-python3 -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 echo 'DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require' > .env
-psql "$DATABASE_URL" -f scripts/schema.sql           # create the table
-python scripts/backfill.py                            # backfill history
-streamlit run streamlit_app.py                        # run the app
+psql "$DATABASE_URL" -f scripts/schema.sql
+python scripts/backfill.py
+streamlit run streamlit_app.py
 
-# reproduce the analysis:
-python scripts/backtest.py        # price-level backtest
-pip install arch
-python scripts/vol_backtest.py    # volatility backtest (persistence / EWMA / GARCH)
+# reproduce the validation work
+python scripts/validate_assumptions.py  
+python scripts/regime_backtest.py        
+python scripts/check_vol_dates.py        
 ```
-
-> `.env` is gitignored and never committed.
 
 ## Roadmap
 
-- [ ] Add robusta as a second instrument
-- [ ] External features (weather, FX) for a returns/direction model
-- [ ] Date-range controls and richer chart interactions
+- [ ] **Ongoing monitoring** — rolling forecast error with drift thresholds,
+      surfaced on the dashboard
+- [ ] **Validation memo** — formal write-up: background, assumptions,
+      benchmarking, findings, recommendations
+- [ ] Verify causal attribution for the 2021 and 2026 volatility episodes
+- [ ] Additional instruments (robusta, related softs) for cross-asset analysis
 
