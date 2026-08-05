@@ -1,25 +1,16 @@
 # Coffee Price Tracker & Forecast
 
-A production-style forecasting pipeline for coffee futures, paired with an MRM-inspired model validation layer: assumption testing, multi-baseline benchmarking, and structural-break analysis. 
+A live coffee-futures data pipeline and dashboard, paired with an MRM-inspired model validation and monitoring layer: assumption testing, regime-segmented benchmarking, and GARCH-based anomaly detection.
 
-> This project applies model-risk-management *practices* (assumption testing,
-> benchmarking, limitations documentation) to a self-built forecasting model. It
-> demonstrates validation discipline; it is not a regulated validation exercise.
+🔗 Live dashboard: https://caphe-forecast.streamlit.app/ 
 
 ---
-> Applies model-risk-management *practices* to a self-built forecasting model.
-> It demonstrates validation discipline; it is not a regulated validation exercise.
+> Applies model-risk-management practices to a self-built model. Demonstrates validation discipline; not a regulated validation exercise.
 ---
 
-## Why this project
+## What it does
 
-This one asks the question a model validator asks: **should this model be trusted, and where does
-it break?**
-
-Pipeline: it ingests data daily, stores it in a hosted database,
-and serves a public dashboard. The validation layer sits on top: testing whether
-the model's assumptions hold, benchmarking it against alternatives, and
-documenting where it's fragile.
+Ingests daily coffee futures, stores multi-year history in a hosted database, refreshes automatically, and serves a public dashboard — then he validation layer sits on top: testing whether the model's assumptions hold, benchmarking it against alternatives, and documenting where it's fragile with monitors on top of that pipeline.
 
 ## Headline findings
 
@@ -45,64 +36,36 @@ backtesting (no look-ahead bias)_
 → Methodology, full tables, and caveats in
 [`notebooks/validation_findings.md`](notebooks/validation_findings.md).
 
-## Status
-
-| Component | Status |
-|---|---|
-| Data pipeline (ingest → Postgres → dashboard) | Live |
-| Daily automated refresh (GitHub Actions) | Live |
-| Volatility model (GARCH / EWMA) | Complete |
-| Assumption testing (ADF, ARCH effects) | Complete |
-| Regime-segmented benchmarking |  Complete |
-| Structural-break analysis | Complete |
-| Ongoing monitoring (drift tracking) | In progress |
-| Validation memo | Planned |
-
 ## Architecture
-
+ 
 ```
 yfinance (KC=F)
       │
       ▼
-Python fetcher ──upsert──▶ Neon (hosted PostgreSQL)
-      ▲                          │
-      │                          ▼
-GitHub Actions (daily cron)   Streamlit dashboard ──▶ public URL
-                                   │
-                                   ▼
-                        Validation layer (offline):
-                        assumptions · benchmarking · breaks
+Python fetcher ──upsert──▶ Neon (PostgreSQL) ──▶ Streamlit dashboard ──▶ public URL
+      ▲                          ▲
+      │                          │
+GitHub Actions (daily cron)   Validation & anomaly detection (offline)
 ```
-
 Loads are **idempotent** (`INSERT ... ON CONFLICT`), so re-runs never duplicate
 data. Backtests and validation tests run offline; the dashboard displays
 evaluated results rather than recomputing them per page load.
 
 ## Tech stack
-
-| Layer | Tool |
-|---|---|
-| Data source | yfinance (`KC=F`, ICE Coffee C) |
-| Database | Neon (serverless PostgreSQL) |
-| Modelling | `arch` (GARCH), numpy (EWMA) |
-| Validation | statsmodels (ADF, Engle LM, Ljung–Box) |
-| App / UI | Streamlit + Plotly |
-| Automation | GitHub Actions (daily cron) |
-| Hosting | Streamlit Community Cloud |
+ 
+Python · PostgreSQL (Neon) · Streamlit + Plotly · GitHub Actions · `arch` (GARCH)
+· statsmodels (ADF, ARCH tests) · numpy / pandas · yfinance
 
 ## Repository guide
 
 | Path | Purpose |
 |---|---|
-| `scripts/fetch_futures.py` | Extract daily OHLCV from the API |
-| `scripts/db.py` | Idempotent upsert layer |
-| `scripts/backfill.py` | Full historical load / daily refresh |
-| `scripts/backtest.py` | Walk-forward backtest — price models |
-| `scripts/vol_backtest.py` | Walk-forward backtest — volatility models |
-| `scripts/regime_backtest.py` | Regime-segmented scorecard |
-| `scripts/validate_assumptions.py` | ADF, ARCH-effect tests, break plot |
-| `scripts/check_vol_dates.py` | Maps volatility regimes to calendar dates |
-| `streamlit_app.py` | Dashboard (price + volatility analysis) |
+| `scripts/fetch_futures.py` · `db.py` · `backfill.py` | Extract → idempotent load |
+| `scripts/backtest.py` · `vol_backtest.py` · `regime_backtest.py` | Walk-forward benchmarking |
+| `scripts/validate_assumptions.py` | ADF + ARCH-effect tests |
+| `scripts/detect_anomalies.py` · `schema_anomalies.sql` | GARCH anomaly detection + storage |
+| `scripts/check_vol_dates.py` | Regime dates & thresholds |
+| `streamlit_app.py` | Dashboard (Price · Volatility · Monitoring) |
 | `docs/validation_findings.md` | Full validation write-up |
 
 ## Running locally
@@ -113,22 +76,24 @@ cd caphe-forecast
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 echo 'DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require' > .env
-psql "$DATABASE_URL" -f scripts/schema.sql
-python scripts/backfill.py
+ 
+psql "$DATABASE_URL" -f scripts/schema.sql            # price table
+psql "$DATABASE_URL" -f scripts/schema_anomalies.sql  # anomaly table
+python scripts/backfill.py                             # load history
+python scripts/detect_anomalies.py                     # compute anomaly flags
 streamlit run streamlit_app.py
-
-# reproduce the validation work
-python scripts/validate_assumptions.py  
-python scripts/regime_backtest.py        
-python scripts/check_vol_dates.py        
+ 
+# reproduce the analysis
+python scripts/validate_assumptions.py   # assumption tests
+python scripts/regime_backtest.py        # regime-segmented scorecard
 ```
-
-## Roadmap
-
-- [ ] **Ongoing monitoring** — rolling forecast error with drift thresholds,
-      surfaced on the dashboard
-- [ ] **Validation memo** — formal write-up: background, assumptions,
-      benchmarking, findings, recommendations
-- [ ] Verify causal attribution for the 2021 and 2026 volatility episodes
+## Status & roadmap
+ 
+**Live:** pipeline · daily refresh · volatility model · assumption testing ·
+regime benchmarking · anomaly monitoring.
+ 
+- [ ] Walk-forward (real-time) anomaly detector for the daily cron
+- [ ] Anomaly attribution (price-gap vs. volatility-spike; isolated vs. persistent)
+- [ ] Validation memo (formal write-up)
 - [ ] Additional instruments (robusta, related softs) for cross-asset analysis
 
